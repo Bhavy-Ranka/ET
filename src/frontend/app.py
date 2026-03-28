@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 
-# Ensure this matches the port FastAPI runs on
+
 BASE_URL = "http://127.0.0.1:8000"
 
 st.set_page_config(page_title="AI-Smart city", layout="wide")
