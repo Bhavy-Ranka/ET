@@ -23,6 +23,8 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class DescriptionRequest(BaseModel):
     text: str
+    address: str
+    filename:str
 
 @app.post("/files/")
 async def create_file(file: Annotated[bytes, File()]):
@@ -43,7 +45,9 @@ async def create_upload_file(file: UploadFile):
 @app.post("/imageDescription")
 async def give_description(req: DescriptionRequest):
     # Here is where you would normally call your VLM logic
-    return {"description": req.text}
+    return {"description": req.text,
+            "address":req.address,
+            "filename": req.filename}
 
 @app.get("/view/{filename}")
 async def view_image(filename: str):
