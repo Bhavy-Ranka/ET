@@ -1,0 +1,11 @@
+in rag 
+
+1. processing the image 
+2. extracting the text from the image using OCR
+3. analyzing the extracted text for relevant information
+4. now combine the extracted text and combine the user query which is uploaded 
+by the user.
+5. use the combined data to match the same use issue regarding the place if it matches to that issue and location is also same then we merge both query and give more prioity to the user query and update the issue and nagar palika complaint system;
+6. if the issue is not matching then we create a new issue in the nagar palika complaint system and update the user query with the new issue id and give the response to the user.
+7. if the location is not matching then we create a new issue in the nagar palika complaint system and update the user query with the new issue id and give the response to the user.
+8. if the issue is matching but the location is not matching then we create a new issue in the nagar palika complaint system and update the user query with the new issue id and give the response to the user.
