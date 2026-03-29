@@ -208,4 +208,4 @@ Each complaint card shows image, description, reporter, location, and a **Mark R
 
 - **Bhavy Ranka**
 
--**Aditya Rai**
+- **Aditya Rai**
