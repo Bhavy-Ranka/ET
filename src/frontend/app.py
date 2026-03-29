@@ -8,7 +8,6 @@ st.set_page_config(page_title="AI-Smart City", layout="wide")
 
 st.markdown("""
 <style>
-    /* Auth card */
     .auth-card {
         background: linear-gradient(135deg, #0d1b2a 0%, #1a3a5c 100%);
         border: 1px solid #2e6da4;
@@ -32,7 +31,6 @@ st.markdown("""
         text-align: center;
         margin-bottom: 24px;
     }
-    /* Tab-style toggle */
     .tab-row {
         display: flex;
         border-radius: 8px;
@@ -40,7 +38,6 @@ st.markdown("""
         border: 1px solid #2e6da4;
         margin-bottom: 24px;
     }
-    /* Logged-in badge */
     .user-badge {
         background: #1a3a5c;
         border: 1px solid #2e6da4;
@@ -53,7 +50,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "token" not in st.session_state:
@@ -61,7 +57,8 @@ if "token" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state["username"] = None
 if "auth_mode" not in st.session_state:
-    st.session_state["auth_mode"] = "Login"   
+    st.session_state["auth_mode"] = "Login"
+
 
 def auth_page():
     st.markdown("<h1 style='text-align:center;color:#d0e8ff;letter-spacing:2px;margin-top:20px;'>🏙️ AI SMART CITY</h1>", unsafe_allow_html=True)
@@ -69,7 +66,7 @@ def auth_page():
 
     _, mid, _ = st.columns([1, 1.6, 1])
     with mid:
-\        col_l, col_r = st.columns(2)
+        col_l, col_r = st.columns(2)
         with col_l:
             if st.button("🔑  Login", use_container_width=True,
                          type="primary" if st.session_state["auth_mode"] == "Login" else "secondary"):
@@ -145,6 +142,7 @@ def auth_page():
                     except requests.exceptions.ConnectionError:
                         st.error("Cannot connect to the backend. Is it running?")
 
+
 def main_app():
     col_title, col_user = st.columns([5, 1])
     with col_title:
@@ -158,6 +156,7 @@ def main_app():
                 st.session_state.pop(key, None)
             st.rerun()
 
+    # ─── 1. Upload Section ───
     st.header("Upload Image")
     uploaded_file = st.file_uploader("Choose a file", type=['png', 'jpg', 'jpeg'])
 
@@ -201,7 +200,8 @@ def main_app():
                 if response.status_code == 200:
                     data = response.json()
                     st.session_state["confirmed_description"] = data.get("description")
-                    st.session_state["confirmed_address"] = data.get("address")
+                    # FIX: backend now returns address; fall back to the input if somehow missing
+                    st.session_state["confirmed_address"] = data.get("address") or address_input
                     st.success("Description uploaded successfully.")
                 else:
                     st.error(f"Failed to upload description. Status: {response.status_code}")
@@ -234,14 +234,16 @@ def main_app():
                 unsafe_allow_html=True
             )
 
-    
-def admin_panel():
-    st.title("🏙️ AI Smart City - Admin Panel")
-    st.subheader(f"Welcome, {st.session_state['username']} (Administrator)")
 
-    if st.button("Logout", type="secondary"):
-        st.session_state.clear()
-        st.rerun()
+def admin_panel():
+    col_title, col_user = st.columns([5, 1])
+    with col_title:
+        st.title("🏙️ AI Smart City — Admin Panel")
+    with col_user:
+        st.markdown(f"<div class='user-badge'>🛡️ {st.session_state['username']}</div>", unsafe_allow_html=True)
+        if st.button("Logout", type="secondary"):
+            st.session_state.clear()
+            st.rerun()
 
     st.divider()
 
@@ -254,19 +256,26 @@ def admin_panel():
                 st.info("No complaints have been filed yet.")
             else:
                 for c in complaints:
-                    with st.expander(f"📌 {c['username']} - {c['address']}"):
+                    with st.expander(f"📌 {c['username']} — {c['address']}"):
                         st.write(f"**Description:** {c['text']}")
-                        st.image(f"{BASE_URL}/view/{c['filename']}", caption="Attached Evidence", width=300)
-                        st.write(f"**Current Severity:** {c['severity']}")
+                        st.image(
+                            f"{BASE_URL}/view/{c['filename']}",
+                            caption="Attached Evidence",
+                            width=300
+                        )
+                        st.write(f"**Severity:** {c['severity']}")
         else:
-            st.error("Access denied. Are you sure you're an admin?")
-    except Exception as e:
-        st.error("Failed to connect to the backend server.")    
-        
+            st.error("Access denied or backend error.")
+    except requests.exceptions.ConnectionError:
+        st.error("Cannot connect to the backend. Is it running?")
+
+
+ADMIN_USERS = ["BHAVY", "SMARTYY"]
+
 if st.session_state["logged_in"]:
-    if st.session_state["username"] in ["BHAVY", "SMARTYY"]:
+    if st.session_state["username"] in ADMIN_USERS:
         admin_panel()
     else:
         main_app()
 else:
-    auth_page()        
+    auth_page()
