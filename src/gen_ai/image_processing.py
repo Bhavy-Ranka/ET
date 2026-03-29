@@ -19,7 +19,7 @@ def _get_genai_client():
         raise RuntimeError(
             "google-genai is not installed. Install it with: pip install google-genai"
         )
-    api_key = os.getenv("GEMINI_API_KEY", _GEMINI_API_KEY).strip()
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError(
             "GEMINI_API_KEY is not set. Please export it before calling extract_text()."
