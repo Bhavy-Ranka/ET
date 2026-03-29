@@ -34,7 +34,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 router = APIRouter()
 
-# --- Database Dependency ---
+
 def get_db():
     db = SessionLocal()
     try:
@@ -42,7 +42,7 @@ def get_db():
     finally:
         db.close()
 
-# --- Helper Functions ---
+
 def get_password_hash(password):
     return pwd_context.hash(password)
 
@@ -59,7 +59,8 @@ def create_access_token(data: dict):
 
 @router.post("/signup")
 async def signup(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # Check if user exists in SQL
+
+    
     existing_user = db.query(UserDB).filter(UserDB.username == form_data.username).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already registered")
