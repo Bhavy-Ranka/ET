@@ -104,7 +104,6 @@ def _severity_to_priority(severity):
     return {"Low": 1, "Medium": 2, "High": 3}.get(severity, 2)
 
 
-
 def grievance_pipeline(image_path, raw_location, user_text):
     image_description = extract_text(image_path)
     if not image_description:
@@ -150,7 +149,9 @@ def grievance_pipeline(image_path, raw_location, user_text):
     if payload is None:
         payload = {
             "issue_title": user_text.strip() or "Civic Issue",
-            "detailed_description": _normalize_whitespace(f"{user_text} {image_description}"),
+            "detailed_description": _normalize_whitespace(
+                f"{user_text} {image_description}"
+            ),
             "category": DEFAULT_CATEGORY,
             "severity": DEFAULT_SEVERITY,
             "formatted_location": _normalize_location(raw_location),
@@ -158,24 +159,30 @@ def grievance_pipeline(image_path, raw_location, user_text):
         }
 
     issue_title = _normalize_whitespace(payload.get("issue_title")) or "Civic Issue"
-    detailed_description = _normalize_whitespace(payload.get("detailed_description")) or _normalize_whitespace(user_text)
+    detailed_description = _normalize_whitespace(
+        payload.get("detailed_description")
+    ) or _normalize_whitespace(user_text)
     category = _normalize_category(payload.get("category"))
     severity = _normalize_severity(payload.get("severity"))
-    formatted_location = _normalize_location(payload.get("formatted_location") or raw_location)
-    tags = _normalize_tags(payload.get("tags"))
-    print(
-        {"issue_title": issue_title,
-        "detailed_description": detailed_description,
-        "category": category,
-        "severity": severity,
-        "formatted_location": formatted_location,
-        "tags": tags,
-        "priority": _severity_to_priority(severity),
-        "report_count": 1,
-        "status": "open",
-        "raw_location": _normalize_location(raw_location),
-        "image_path": image_path}
+    formatted_location = _normalize_location(
+        payload.get("formatted_location") or raw_location
     )
+    tags = _normalize_tags(payload.get("tags"))
+    # print(
+    #     {
+    #         "issue_title": issue_title,
+    #         "detailed_description": detailed_description,
+    #         "category": category,
+    #         "severity": severity,
+    #         "formatted_location": formatted_location,
+    #         "tags": tags,
+    #         "priority": _severity_to_priority(severity),
+    #         "report_count": 1,
+    #         "status": "open",
+    #         "raw_location": _normalize_location(raw_location),
+    #         "image_path": image_path,
+    #     }
+    # )
 
     return {
         "issue_title": issue_title,
@@ -198,5 +205,4 @@ if __name__ == "__main__":
         "Near IIT Indore Gate 2",
         "Road pe bahut bada gadda hai",
     )
-    print("ha bhosdi ho gaya!!!!!!!!!!")
     print(result)
