@@ -53,6 +53,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "token" not in st.session_state:
@@ -60,18 +61,15 @@ if "token" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state["username"] = None
 if "auth_mode" not in st.session_state:
-    st.session_state["auth_mode"] = "Login"   # or "Sign Up"
-
+    st.session_state["auth_mode"] = "Login"   
 
 def auth_page():
     st.markdown("<h1 style='text-align:center;color:#d0e8ff;letter-spacing:2px;margin-top:20px;'>🏙️ AI SMART CITY</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center;color:#7aafd4;margin-bottom:0;'>Intelligent Urban Complaint Management</p>", unsafe_allow_html=True)
 
-    
     _, mid, _ = st.columns([1, 1.6, 1])
     with mid:
-        
-        col_l, col_r = st.columns(2)
+\        col_l, col_r = st.columns(2)
         with col_l:
             if st.button("🔑  Login", use_container_width=True,
                          type="primary" if st.session_state["auth_mode"] == "Login" else "secondary"):
@@ -86,8 +84,6 @@ def auth_page():
         st.markdown("---")
 
         if st.session_state["auth_mode"] == "Login":
-
-            
             st.markdown("<div class='auth-title'>Welcome Back</div>", unsafe_allow_html=True)
             st.markdown("<div class='auth-subtitle'>Sign in to continue</div>", unsafe_allow_html=True)
 
@@ -118,7 +114,6 @@ def auth_page():
                         st.error("Cannot connect to the backend. Is it running?")
 
         else:
-        
             st.markdown("<div class='auth-title'>Create Account</div>", unsafe_allow_html=True)
             st.markdown("<div class='auth-subtitle'>Join AI Smart City today</div>", unsafe_allow_html=True)
 
@@ -150,11 +145,7 @@ def auth_page():
                     except requests.exceptions.ConnectionError:
                         st.error("Cannot connect to the backend. Is it running?")
 
-
-
-
 def main_app():
-    
     col_title, col_user = st.columns([5, 1])
     with col_title:
         st.title("🏙️ AI SMART CITY")
@@ -167,7 +158,6 @@ def main_app():
                 st.session_state.pop(key, None)
             st.rerun()
 
-    # ─── 1. Upload Section ───
     st.header("Upload Image")
     uploaded_file = st.file_uploader("Choose a file", type=['png', 'jpg', 'jpeg'])
 
@@ -220,7 +210,6 @@ def main_app():
 
     st.divider()
 
-    # ─── 3. Result Display ───
     if "uploaded_image" in st.session_state and "confirmed_description" in st.session_state:
         st.header("Result")
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -245,8 +234,39 @@ def main_app():
                 unsafe_allow_html=True
             )
 
+    
+def admin_panel():
+    st.title("🏙️ AI Smart City - Admin Panel")
+    st.subheader(f"Welcome, {st.session_state['username']} (Administrator)")
 
+    if st.button("Logout", type="secondary"):
+        st.session_state.clear()
+        st.rerun()
+
+    st.divider()
+
+    headers = {"Authorization": f"Bearer {st.session_state['token']}"}
+    try:
+        resp = requests.get(f"{BASE_URL}/admin/complaints", headers=headers)
+        if resp.status_code == 200:
+            complaints = resp.json()
+            if not complaints:
+                st.info("No complaints have been filed yet.")
+            else:
+                for c in complaints:
+                    with st.expander(f"📌 {c['username']} - {c['address']}"):
+                        st.write(f"**Description:** {c['text']}")
+                        st.image(f"{BASE_URL}/view/{c['filename']}", caption="Attached Evidence", width=300)
+                        st.write(f"**Current Severity:** {c['severity']}")
+        else:
+            st.error("Access denied. Are you sure you're an admin?")
+    except Exception as e:
+        st.error("Failed to connect to the backend server.")    
+        
 if st.session_state["logged_in"]:
-    main_app()
+    if st.session_state["username"] in ["BHAVY", "SMARTYY"]:
+        admin_panel()
+    else:
+        main_app()
 else:
-    auth_page()
+    auth_page()        
