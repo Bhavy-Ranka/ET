@@ -6,7 +6,6 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from database import ComplaintDB, SessionLocal
-
 from authentication import router as auth_router, get_current_user
 
 app = FastAPI()
@@ -60,7 +59,8 @@ async def give_description(req: DescriptionRequest, current_user: str = Depends(
     db.add(new_complaint)
     db.commit()
     db.close()
-    return {"status": "Complaint Saved", "description": req.text,"address":req.address}
+    # FIX: also return address so the frontend can display it
+    return {"status": "Complaint Saved", "description": req.text, "address": req.address}
 
 
 @app.get("/view/{filename}")
@@ -75,11 +75,9 @@ async def view_image(filename: str):
 async def get_all_complaints(current_user: str = Depends(get_current_user)):
     if current_user not in ["BHAVY", "SMARTYY"]:
         raise HTTPException(status_code=403, detail="Not authorized as admin")
-
     db = SessionLocal()
     complaints = db.query(ComplaintDB).all()
     db.close()
-
     return [
         {
             "username": c.username,
