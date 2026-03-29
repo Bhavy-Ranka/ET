@@ -10,11 +10,13 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+
 class UserDB(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+
 
 class ComplaintDB(Base):
     __tablename__ = "complaints"
@@ -23,10 +25,11 @@ class ComplaintDB(Base):
     text = Column(Text)
     address = Column(String)
     filename = Column(String)
-    severity = Column(Integer, default=0) 
+    severity = Column(Integer, default=0)
 
-# Create tables once
+
 Base.metadata.create_all(bind=engine)
+
 
 def get_db():
     db = SessionLocal()
