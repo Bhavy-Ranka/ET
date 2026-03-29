@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 from typing import Annotated
 from pydantic import BaseModel
@@ -8,9 +9,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import ComplaintDB, SessionLocal
 from authentication import router as auth_router, get_current_user
 
+# PYTHONPATH is set by run_app.py, so this just works
+try:
+    from gen_ai.ai_main import run_pipeline
+    # fromfrom gen_ai.ai_main import run_pipeline
+#  import run_pipeline  # PYTHONPATH set by run_app.py
+    _PIPELINE_AVAILABLE = True
+    print("ha bhai ho gai!!")
+except Exception as _err:
+    _PIPELINE_AVAILABLE = False
+    print(f"[WARNING] gen_ai pipeline could not be imported: {_err}")
+
+print("ndnwej")
 app = FastAPI()
 
-# --- CORS Configuration ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -49,18 +61,45 @@ async def create_upload_file(file: UploadFile, current_user: str = Depends(get_c
 
 @app.post("/imageDescription")
 async def give_description(req: DescriptionRequest, current_user: str = Depends(get_current_user)):
+    # 1. Save complaint to SQLite DB
     db = SessionLocal()
     new_complaint = ComplaintDB(
         username=current_user,
         text=req.text,
         address=req.address,
-        filename=req.filename
+        filename=req.filename,
     )
     db.add(new_complaint)
     db.commit()
     db.close()
-    # FIX: also return address so the frontend can display it
-    return {"status": "Complaint Saved", "description": req.text, "address": req.address}
+
+    # 2. Run AI pipeline
+    pipeline_result = {}
+    pipeline_warning = None
+
+    if not _PIPELINE_AVAILABLE:
+        pipeline_warning = "Pipeline unavailable at startup; skipping."
+    else:
+        image_path = os.path.join(UPLOAD_DIR, req.filename)
+        if not os.path.isfile(image_path):
+            pipeline_warning = f"Image '{req.filename}' not found in uploads/; pipeline skipped."
+        else:
+            try:
+                pipeline_result = run_pipeline(image_path, req.address, req.text)
+            except Exception as exc:
+                pipeline_warning = f"Pipeline error: {exc}"
+                print(f"[ERROR] Pipeline failed: {exc}")
+
+    response = {
+        "status": "Complaint Saved",
+        "description": req.text,
+        "address": req.address,
+        "pipeline": pipeline_result,
+    }
+    if pipeline_warning:
+        response["pipeline_warning"] = pipeline_warning
+
+    return response
 
 
 @app.get("/view/{filename}")
