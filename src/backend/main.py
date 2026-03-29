@@ -2,11 +2,11 @@ import os
 import shutil
 from typing import Annotated
 from pydantic import BaseModel
-from fastapi import FastAPI, File, UploadFile, HTTPException,Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from database import ComplaintDB, SessionLocal
 
-# Import the auth router from authentication.py
 from authentication import router as auth_router, get_current_user
 
 app = FastAPI()
@@ -20,7 +20,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Include Auth Routes (/signup and /login) ---
 app.include_router(auth_router)
 
 UPLOAD_DIR = "uploads"
@@ -51,11 +50,17 @@ async def create_upload_file(file: UploadFile, current_user: str = Depends(get_c
 
 @app.post("/imageDescription")
 async def give_description(req: DescriptionRequest, current_user: str = Depends(get_current_user)):
-    return {
-        "description": req.text,
-        "address": req.address,
-        "filename": req.filename
-    }
+    db = SessionLocal()
+    new_complaint = ComplaintDB(
+        username=current_user,
+        text=req.text,
+        address=req.address,
+        filename=req.filename
+    )
+    db.add(new_complaint)
+    db.commit()
+    db.close()
+    return {"status": "Complaint Saved", "description": req.text,"address":req.address}
 
 
 @app.get("/view/{filename}")
@@ -64,3 +69,24 @@ async def view_image(filename: str):
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail=f"File {filename} not found on server.")
     return FileResponse(file_path)
+
+
+@app.get("/admin/complaints")
+async def get_all_complaints(current_user: str = Depends(get_current_user)):
+    if current_user not in ["BHAVY", "SMARTYY"]:
+        raise HTTPException(status_code=403, detail="Not authorized as admin")
+
+    db = SessionLocal()
+    complaints = db.query(ComplaintDB).all()
+    db.close()
+
+    return [
+        {
+            "username": c.username,
+            "text": c.text,
+            "address": c.address,
+            "filename": c.filename,
+            "severity": c.severity,
+        }
+        for c in complaints
+    ]
