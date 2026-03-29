@@ -152,7 +152,7 @@ Admin credentials are environment-hardened. Regular users sign up via the UI.
 
 ---
 
-## 🤖 How the AI Pipeline Works
+## How the AI Pipeline Works
 
 1. **Citizen uploads** a photo of a civic issue (pothole, garbage, etc.) with a text description and location
 2. **Gemini Vision** analyzes the image and returns a natural language description of the issue
@@ -176,7 +176,7 @@ Admin credentials are environment-hardened. Regular users sign up via the UI.
 
 ---
 
-## 📊 Admin Dashboard
+##  Admin Dashboard
 
 Admins see complaints sorted into three real-time columns:
 
@@ -188,7 +188,7 @@ Each complaint card shows image, description, reporter, location, and a **Mark R
 
 ---
 
-## 🌍 Real-World Impact
+##  Real-World Impact
 
 - **Deduplication** prevents the same pothole from being filed 50 times, saving municipality processing time
 - **Auto-prioritization** ensures high-severity issues surface first without manual sorting
@@ -197,12 +197,8 @@ Each complaint card shows image, description, reporter, location, and a **Mark R
 
 ---
 
-## 📄 License
-
-MIT License — built for the hackathon, open for civic good.
-
----
 
 ## 👥 Team
 
-Built with ❤️ for smarter Indian cities.
+Bhavy Ranka
+Aditya Rai
