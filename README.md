@@ -14,16 +14,16 @@ Citizens report civic issues (potholes, garbage, broken lights, water leakage) t
 
 ---
 
-## 🚀 Features
+## Features
 
-- 📸 **Vision AI** — Gemini 2.5 Flash analyzes uploaded images to detect civic issue type, severity, and surroundings
-- 🧠 **LLM Structuring** — Llama 3.3 70B (via Groq) converts raw user text + image description into a structured JSON grievance report
-- 🔍 **3-Stage Deduplication Pipeline** — Vector search → LLM location matching → cosine similarity threshold to prevent duplicate complaints
-- 📍 **Smart Location Normalization** — Tokenized location matching with LLM fallback for fuzzy address resolution
-- 🗄️ **Dual Database Architecture** — SQLite for user auth, MongoDB Atlas for vector-indexed grievance storage
-- 🛡️ **JWT Authentication** — Secure role-based access with admin and citizen roles
-- 📊 **Admin Dashboard** — Real-time severity-sorted complaint board with image preview and one-click resolution
-- 🔄 **Auto Priority Escalation** — Report count and priority auto-incremented on duplicate detections
+- **Vision AI** — Gemini 2.5 Flash analyzes uploaded images to detect civic issue type, severity, and surroundings
+- **LLM Structuring** — Llama 3.3 70B (via Groq) converts raw user text + image description into a structured JSON grievance report
+- **3-Stage Deduplication Pipeline** — Vector search → LLM location matching → cosine similarity threshold to prevent duplicate complaints
+- **Smart Location Normalization** — Tokenized location matching with LLM fallback for fuzzy address resolution
+- **Dual Database Architecture** — SQLite for user auth, MongoDB Atlas for vector-indexed grievance storage
+- **JWT Authentication** — Secure role-based access with admin and citizen roles
+- **Admin Dashboard** — Real-time severity-sorted complaint board with image preview and one-click resolution
+- **Auto Priority Escalation** — Report count and priority auto-incremented on duplicate detections
 
 ---
 
@@ -200,5 +200,6 @@ Each complaint card shows image, description, reporter, location, and a **Mark R
 
 ## 👥 Team
 
-Bhavy Ranka
-Aditya Rai
+- **Bhavy Ranka**
+
+-**Aditya Rai**
