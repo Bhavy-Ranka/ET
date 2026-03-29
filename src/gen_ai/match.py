@@ -1,11 +1,12 @@
 import json
+import math
 import os
 import re
 
 try:
-    import psycopg2
+    from pymongo import MongoClient
 except ModuleNotFoundError:
-    psycopg2 = None
+    MongoClient = None
 
 try:
     from groq import Groq
@@ -17,13 +18,13 @@ try:
 except ModuleNotFoundError:
     genai = None
 
-DB_CONFIG = {
-    "dbname": os.getenv("PGDATABASE", "hack"),
-    "user": os.getenv("PGUSER", "db"),
-    "password": os.getenv("PGPASSWORD", "0808"),
-    "host": os.getenv("PGHOST", "localhost"),
-    "port": int(os.getenv("PGPORT", "5432")),
-}
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+MONGO_DB = os.getenv("MONGO_DB", "hack")
+MONGO_COLLECTION = os.getenv("MONGO_COLLECTION", "grievances")
+MONGO_CANDIDATE_SCAN_LIMIT = int(os.getenv("MONGO_CANDIDATE_SCAN_LIMIT", "500"))
+MONGO_VECTOR_INDEX = os.getenv("MONGO_VECTOR_INDEX", "").strip()
+MONGO_VECTOR_PATH = os.getenv("MONGO_VECTOR_PATH", "embedding").strip() or "embedding"
+MONGO_NUM_CANDIDATES = int(os.getenv("MONGO_NUM_CANDIDATES", "50"))
 
 ALLOWED_CATEGORIES = {
     "waste management": "Waste Management",
@@ -49,6 +50,7 @@ _GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 # text-embedding-004 lives on v1beta; generate_content models live on v1
 _embed_client = None
 _generate_client = None
+_mongo_client = None
 
 
 def _get_embed_client():
@@ -86,6 +88,15 @@ def _get_groq_client():
             "GROQ_API_KEY is not set. Please export it before calling llm_location_check()."
         )
     return Groq(api_key=api_key)
+
+
+def _get_mongo_collection():
+    global _mongo_client
+    if MongoClient is None:
+        raise RuntimeError("pymongo is not installed. Install it with: pip install pymongo")
+    if _mongo_client is None:
+        _mongo_client = MongoClient(MONGO_URI)
+    return _mongo_client[MONGO_DB][MONGO_COLLECTION]
 
 
 def _normalize_whitespace(text):
@@ -166,18 +177,20 @@ def _simple_location_match(new_loc, candidates):
 
 def _normalize_payload(payload):
     data = dict(payload or {})
+    raw_location = data.get("raw_location") or data.get("location")
+    user_text = data.get("user_text") or data.get("text")
     data["issue_title"] = (
         _normalize_whitespace(data.get("issue_title")) or "Civic Issue"
     )
     data["detailed_description"] = _normalize_whitespace(
         data.get("detailed_description")
-    ) or _normalize_whitespace(data.get("user_text"))
+    ) or _normalize_whitespace(user_text)
     if not data["detailed_description"]:
         data["detailed_description"] = data["issue_title"]
     data["category"] = _normalize_category(data.get("category"))
     data["severity"] = _normalize_severity(data.get("severity"))
     data["formatted_location"] = _normalize_whitespace(
-        data.get("formatted_location") or data.get("raw_location")
+        data.get("formatted_location") or raw_location
     )
     data["tags"] = _normalize_tags(data.get("tags"))
     data.setdefault("priority", _severity_to_priority(data["severity"]))
@@ -200,63 +213,81 @@ def _safe_json_loads(text):
         return json.loads(match.group(0))
 
 
-def _format_vector(vector):
-    return "[" + ",".join(f"{v:.6f}" for v in vector) + "]"
+def _cosine_distance(vector_a, vector_b):
+    if not vector_a or not vector_b:
+        return 1.0
+    if len(vector_a) != len(vector_b):
+        return 1.0
+    dot = 0.0
+    norm_a = 0.0
+    norm_b = 0.0
+    for a, b in zip(vector_a, vector_b):
+        dot += a * b
+        norm_a += a * a
+        norm_b += b * b
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 1.0
+    return 1.0 - (dot / (math.sqrt(norm_a) * math.sqrt(norm_b)))
 
 
-def _get_column_info(cur):
-    cur.execute(
-        """
-        SELECT column_name, data_type, udt_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public' AND table_name = 'grievances';
-        """
+def _fetch_candidates_vector_search(collection, vector, category, include_category=True):
+    if not MONGO_VECTOR_INDEX:
+        return []
+    filters = {"status": "open"}
+    if include_category:
+        filters["category"] = category
+    pipeline = [
+        {
+            "$vectorSearch": {
+                "index": MONGO_VECTOR_INDEX,
+                "path": MONGO_VECTOR_PATH,
+                "queryVector": vector,
+                "numCandidates": MONGO_NUM_CANDIDATES,
+                "limit": MAX_CANDIDATES,
+                "filter": filters,
+            }
+        },
+        {
+            "$project": {
+                "formatted_location": 1,
+                "embedding": 1,
+                "status": 1,
+                "category": 1,
+            }
+        },
+    ]
+    return list(collection.aggregate(pipeline))
+
+
+def _fetch_candidates_scan(collection, category, include_category=True):
+    query = {"status": "open"}
+    if include_category:
+        query["category"] = category
+    cursor = (
+        collection.find(query, {"formatted_location": 1, "embedding": 1, "status": 1, "category": 1})
+        .limit(MONGO_CANDIDATE_SCAN_LIMIT)
     )
-    return {row[0]: {"data_type": row[1], "udt_name": row[2]} for row in cur.fetchall()}
+    return list(cursor)
 
 
-def _prepare_tags_value(tags, column_info):
-    if not column_info:
-        return tags
-    data_type = column_info.get("data_type")
-    if data_type in {"json", "jsonb"}:
-        return json.dumps(tags)
-    if data_type == "ARRAY":
-        return tags
-    return ", ".join(tags)
+def _fetch_candidates(collection, vector, category, include_category=True):
+    if MONGO_VECTOR_INDEX:
+        candidates = _fetch_candidates_vector_search(collection, vector, category, include_category=include_category)
+        if candidates:
+            return candidates
+    return _fetch_candidates_scan(collection, category, include_category=include_category)
 
 
-def _prepare_embedding_value(vector, column_info):
-    if not column_info:
-        return vector, ""
-    if column_info.get("udt_name") == "vector":
-        return _format_vector(vector), "::vector"
-    return vector, ""
-
-
-def _fetch_candidates(cur, vector_value, category, columns, include_category=True):
-    filters = []
-    params = [vector_value]
-
-    if "status" in columns:
-        filters.append("status = 'open'")
-    if include_category and "category" in columns:
-        filters.append("category = %s")
-        params.append(category)
-
-    where_sql = f"WHERE {' AND '.join(filters)}" if filters else ""
-
-    cur.execute(
-        f"""
-        SELECT id, formatted_location, embedding <=> %s::vector AS distance
-        FROM grievances
-        {where_sql}
-        ORDER BY distance ASC
-        LIMIT %s;
-        """,
-        (*params, MAX_CANDIDATES),
-    )
-    return cur.fetchall()
+def _rank_candidates(vector, candidates):
+    scored = []
+    for candidate in candidates:
+        embedding = candidate.get("embedding")
+        if not isinstance(embedding, list):
+            continue
+        distance = _cosine_distance(vector, embedding)
+        scored.append((candidate, distance))
+    scored.sort(key=lambda item: item[1])
+    return scored[:MAX_CANDIDATES]
 
 
 # Embedding models to try in order — text-embedding-004 needs paid tier,
@@ -300,7 +331,7 @@ def llm_location_check(new_loc, existing_locs_with_ids):
     Return ONLY a JSON object with:
     {{
         "match_found": boolean,
-        "matching_id": integer or null,
+        "matching_id": string or null,
         "reason": "short explanation"
     }}
     """
@@ -325,149 +356,99 @@ def llm_location_check(new_loc, existing_locs_with_ids):
         }
 
 
-def process_grievance_with_llm_filter(new_json):
-    # 1. Prepare Data
-    normalized = _normalize_payload(new_json)
+# ... (keep existing imports and helper functions) ...
 
-    if psycopg2 is None:
-        print("psycopg2 is not installed; skipping grievance DB operations.")
-        return normalized
+def process_grievance_with_llm_filter(new_json):
+    """
+    Returns a tuple: (result_data, message)
+    """
+    normalized = _normalize_payload(new_json)
+    # Extract user_name from payload
+    user_name = new_json.get("user_name", "Anonymous")
+
+    if MongoClient is None:
+        return normalized, "Error: pymongo not installed"
 
     new_vector = get_embedding(normalized["detailed_description"])
+    collection = _get_mongo_collection()
 
-    conn = psycopg2.connect(**DB_CONFIG)
-    cur = conn.cursor()
+    # 1. Fetch Candidates (Stage 1)
+    candidates = _fetch_candidates(collection, new_vector, normalized["category"], include_category=True)
+    ranked_candidates = _rank_candidates(new_vector, candidates)
 
-    try:
-        columns = _get_column_info(cur)
-        if "embedding" not in columns or "formatted_location" not in columns:
-            save_as_new_issue(cur, normalized, new_vector, columns)
-            conn.commit()
-            return
-        if columns.get("embedding", {}).get("udt_name") != "vector":
-            save_as_new_issue(cur, normalized, new_vector, columns)
-            conn.commit()
-            return
+    # 2. LLM Location Check (Stage 2)
+    loc_candidates = [
+        {"id": str(candidate["_id"]), "location": candidate.get("formatted_location", "")}
+        for candidate, _ in ranked_candidates
+    ]
+    loc_result = llm_location_check(normalized["formatted_location"], loc_candidates)
 
-        vector_value, _ = _prepare_embedding_value(new_vector, columns.get("embedding"))
-
-        # 2. Stage 1: Get top 5 potential candidates by category and basic vector similarity
-        candidates = _fetch_candidates(
-            cur,
-            vector_value,
-            normalized["category"],
-            columns,
-            include_category=True,
+    if loc_result["match_found"]:
+        match_id = str(loc_result["matching_id"])
+        match_entry = next(
+            (
+                (candidate, distance)
+                for candidate, distance in ranked_candidates
+                if str(candidate.get("_id")) == match_id
+            ),
+            None,
         )
 
-        if not candidates:
-            candidates = _fetch_candidates(
-                cur,
-                vector_value,
-                normalized["category"],
-                columns,
-                include_category=False,
-            )
-            if not candidates:
-                save_as_new_issue(cur, normalized, new_vector, columns)
-                conn.commit()
-                return
+        # 3. Final Similarity Check (Stage 3)
+        # Only increment if it's NOT 'resolved' (not done)
+        if match_entry is not None:
+            candidate, match_distance = match_entry
+            if match_distance < SIMILARITY_THRESHOLD:
+                current_status = candidate.get("status", "open")
 
-        # Prepare candidates for LLM
-        loc_candidates = [{"id": c[0], "location": c[1]} for c in candidates]
+                if current_status == "resolved":
+                    # If the previous one is already 'done', treat this as a brand new issue
+                    save_as_new_issue(collection, normalized, new_vector, user_name, new_json)
+                    return normalized, "Grievance registered successfully (previous issue was resolved)."
 
-        # 3. Stage 2: LLM Location Check
-        print(
-            f"Checking location similarity for: {normalized['formatted_location']}..."
-        )
-        loc_result = llm_location_check(
-            normalized["formatted_location"], loc_candidates
-        )
-
-        if loc_result["match_found"]:
-            match_id = loc_result["matching_id"]
-            # Find the distance of this specific match from our candidates list
-            match_distance = next((c[2] for c in candidates if c[0] == match_id), None)
-
-            # 4. Stage 3: Final Similarity Threshold
-            # Even if location matches, the issue must be semantically similar (e.g., not 'pothole' vs 'broken light')
-            if match_distance is not None and match_distance < SIMILARITY_THRESHOLD:
-                updates = ["report_count = report_count + 1"]
-                params = []
-                if "priority" in columns:
-                    updates.append("priority = COALESCE(priority, %s) + 1")
-                    params.append(_severity_to_priority(normalized["severity"]))
-                cur.execute(
-                    f"UPDATE grievances SET {', '.join(updates)} WHERE id = %s",
-                    (*params, match_id),
+                update = {"$inc": {"report_count": 1}}
+                if candidate.get("priority") is None:
+                    update["$set"] = {"priority": _severity_to_priority(normalized["severity"]) + 1}
+                else:
+                    update["$inc"]["priority"] = 1
+                collection.update_one({"_id": candidate["_id"]}, update)
+                return (
+                    normalized,
+                    f"This issue is already registered. We have updated the report count. (ID: {candidate['_id']})",
                 )
-                print(f"MATCH CONFIRMED by LLM & Vector. Updated ID: {match_id}")
-            else:
-                print(
-                    "Location matched, but issue description is too different. Creating new."
-                )
-                save_as_new_issue(cur, normalized, new_vector, columns)
-        else:
-            print("LLM found no matching locations. Creating new issue.")
-            save_as_new_issue(cur, normalized, new_vector, columns)
 
-        conn.commit()
-
-    finally:
-        cur.close()
-        conn.close()
+    # If no match found or location check failed
+    save_as_new_issue(collection, normalized, new_vector, user_name, new_json)
+    return normalized, "Grievance registered successfully."
 
 
-def save_as_new_issue(cur, data, vector, columns):
-    fields = []
-    placeholders = []
-    values = []
+def save_as_new_issue(collection, data, vector, user_name, new_json=None):
+    raw_location = ""
+    image_path = ""
+    user_text = ""
+    image_value = None
+    if isinstance(new_json, dict):
+        raw_location = new_json.get("raw_location") or new_json.get("location") or ""
+        image_value = new_json.get("image")
+        image_path = new_json.get("image_path") or image_value or ""
+        user_text = new_json.get("user_text") or new_json.get("text") or ""
 
-    def add_field(name, value, cast=""):
-        fields.append(name)
-        placeholders.append(f"%s{cast}")
-        values.append(value)
-
-    if "issue_title" in columns:
-        add_field("issue_title", data["issue_title"])
-    if "detailed_description" in columns:
-        add_field("detailed_description", data["detailed_description"])
-    if "category" in columns:
-        add_field("category", data["category"])
-    if "severity" in columns:
-        add_field("severity", data["severity"])
-    if "formatted_location" in columns:
-        add_field("formatted_location", data["formatted_location"])
-    if "raw_location" in columns:
-        add_field("raw_location", data.get("raw_location"))
-    if "image_path" in columns:
-        add_field("image_path", data.get("image_path"))
-    if "tags" in columns:
-        tags_value = _prepare_tags_value(data.get("tags", []), columns.get("tags"))
-        add_field("tags", tags_value)
-    if "embedding" in columns:
-        embedding_value, cast = _prepare_embedding_value(
-            vector, columns.get("embedding")
-        )
-        add_field("embedding", embedding_value, cast)
-    if "priority" in columns:
-        add_field("priority", data.get("priority"))
-    if "report_count" in columns:
-        add_field("report_count", data.get("report_count", 1))
-    if "status" in columns:
-        add_field("status", data.get("status", "open"))
-
-    if not fields:
-        raise RuntimeError(
-            "No compatible columns found in grievances table for insertion."
-        )
-    
-    print(fields)
-    print(placeholders)
-    print(values)
-
-    insert_sql = f"""
-        INSERT INTO grievances ({', '.join(fields)})
-        VALUES ({', '.join(placeholders)})
-    """
-    cur.execute(insert_sql, tuple(values))
+    doc = {
+        "issue_title": data["issue_title"],
+        "detailed_description": data["detailed_description"],
+        "category": data["category"],
+        "severity": data["severity"],
+        "formatted_location": data["formatted_location"],
+        "tags": data.get("tags", []),
+        "priority": data.get("priority", _severity_to_priority(data["severity"])),
+        "report_count": data.get("report_count", 1),
+        "status": data.get("status", "open"),
+        "raw_location": raw_location,
+        "image_path": image_path,
+        "user_text": user_text,
+        "user_name": user_name,
+        "embedding": vector,
+    }
+    if image_value is not None:
+        doc["image"] = image_value
+    collection.insert_one(doc)
