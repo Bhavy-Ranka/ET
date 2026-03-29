@@ -1,13 +1,14 @@
 import json
-<<<<<<< HEAD
+
 import os
-=======
->>>>>>> 84c412f33d79e60708c499460e282bbfec2d7301
 import re
-from groq import Groq
 from image_processing import extract_text
 
-<<<<<<< HEAD
+try:
+    from groq import Groq
+except ModuleNotFoundError:
+    Groq = None
+
 ALLOWED_CATEGORIES = {
     "waste management": "Waste Management",
     "waste": "Waste Management",
@@ -26,10 +27,14 @@ DEFAULT_SEVERITY = "Medium"
 
 
 def _get_groq_client():
-    api_key = os.getenv("Groq", "").strip()
+    if Groq is None:
+        raise RuntimeError(
+            "groq package is not installed. Install it with: pip install groq"
+        )
+    api_key = os.getenv("GROK_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError(
-            "GROQ_API_KEY is not set. Please export it before calling grievance_pipeline()."
+            "GROK_API_KEY is not set. Please export it before calling grievance_pipeline()."
         )
     return Groq(api_key=api_key)
 
@@ -97,15 +102,11 @@ def _safe_json_loads(text):
 
 def _severity_to_priority(severity):
     return {"Low": 1, "Medium": 2, "High": 3}.get(severity, 2)
-=======
-qroq_api = ""
-groq_client = Groq(api_key=qroq_api)
->>>>>>> 84c412f33d79e60708c499460e282bbfec2d7301
+
 
 
 def grievance_pipeline(image_path, raw_location, user_text):
     image_description = extract_text(image_path)
-<<<<<<< HEAD
     if not image_description:
         image_description = "Image description unavailable."
 
@@ -124,55 +125,57 @@ def grievance_pipeline(image_path, raw_location, user_text):
 
     Output Format:
     {{
-    "issue_title": "Short descriptive title",
-    "detailed_description": "Comprehensive summary combining user text and image details",
-    "category": "Waste Management / Road / Water / Electricity / Others",
-    "severity": "Low / Medium / High",
-    "formatted_location": "Cleaned address or coordinates",
-    "tags": ["tag1", "tag2"]
+        "issue_title": "Short descriptive title",
+        "detailed_description": "Comprehensive summary combining user text and image details",
+        "category": "Waste Management / Road / Water / Electricity / Others",
+        "severity": "Low / Medium / High",
+        "formatted_location": "Cleaned address or coordinates",
+        "tags": ["tag1", "tag2"]
     }}
     """
 
-    groq_client = _get_groq_client()
-=======
+    payload = None
+    if Groq is not None:
+        try:
+            groq_client = _get_groq_client()
+            chat_completion = groq_client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama-3.3-70b-versatile",
+                response_format={"type": "json_object"},
+            )
+            payload = _safe_json_loads(chat_completion.choices[0].message.content)
+        except Exception as exc:
+            print(f"Groq LLM call failed ({exc}); falling back to local normalization.")
 
-    prompt = f"""
-     You are a Municipal Grievance Analyzer. Combine the following inputs into a structured JSON report.
-
-     1. User Input: "{user_text}"
-     2. Image Description: "{image_description}"
-     3. Reported Location: "{raw_location}"
-     Output Format (JSON only):
-     {{
-          "issue_title": "Short descriptive title",
-          "detailed_description": "Comprehensive summary combining user text and image details",
-          "category": "Waste Management / Road / Water / Electricity / Others",
-          "severity": "Low / Medium / High",
-          "formatted_location": "Cleaned address or coordinates",
-          "tags": ["tag1", "tag2"]
-     }}
-     """
-
->>>>>>> 84c412f33d79e60708c499460e282bbfec2d7301
-    chat_completion = groq_client.chat.completions.create(
-        messages=[{"role": "user", "content": prompt}],
-        model="llama-3.3-70b-versatile",
-        response_format={"type": "json_object"},
-    )
-
-<<<<<<< HEAD
-    payload = _safe_json_loads(chat_completion.choices[0].message.content)
+    if payload is None:
+        payload = {
+            "issue_title": user_text.strip() or "Civic Issue",
+            "detailed_description": _normalize_whitespace(f"{user_text} {image_description}"),
+            "category": DEFAULT_CATEGORY,
+            "severity": DEFAULT_SEVERITY,
+            "formatted_location": _normalize_location(raw_location),
+            "tags": [],
+        }
 
     issue_title = _normalize_whitespace(payload.get("issue_title")) or "Civic Issue"
-    detailed_description = _normalize_whitespace(
-        payload.get("detailed_description")
-    ) or _normalize_whitespace(user_text)
+    detailed_description = _normalize_whitespace(payload.get("detailed_description")) or _normalize_whitespace(user_text)
     category = _normalize_category(payload.get("category"))
     severity = _normalize_severity(payload.get("severity"))
-    formatted_location = _normalize_location(
-        payload.get("formatted_location") or raw_location
-    )
+    formatted_location = _normalize_location(payload.get("formatted_location") or raw_location)
     tags = _normalize_tags(payload.get("tags"))
+    print(
+        {"issue_title": issue_title,
+        "detailed_description": detailed_description,
+        "category": category,
+        "severity": severity,
+        "formatted_location": formatted_location,
+        "tags": tags,
+        "priority": _severity_to_priority(severity),
+        "report_count": 1,
+        "status": "open",
+        "raw_location": _normalize_location(raw_location),
+        "image_path": image_path}
+    )
 
     return {
         "issue_title": issue_title,
@@ -187,13 +190,13 @@ def grievance_pipeline(image_path, raw_location, user_text):
         "raw_location": _normalize_location(raw_location),
         "image_path": image_path,
     }
-=======
-    return json.loads(chat_completion.choices[0].message.content)
 
-result = grievance_pipeline(
-    "Newport_Whitepit_Lane_pot_hole.jpg",
-    "Near IIT Indore Gate 2",
-    "Road pe bahut bada gadda hai",
-)
-print(result)
->>>>>>> 84c412f33d79e60708c499460e282bbfec2d7301
+
+if __name__ == "__main__":
+    result = grievance_pipeline(
+        "Newport_Whitepit_Lane_pot_hole.jpg",
+        "Near IIT Indore Gate 2",
+        "Road pe bahut bada gadda hai",
+    )
+    print("ha bhosdi ho gaya!!!!!!!!!!")
+    print(result)

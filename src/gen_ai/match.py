@@ -1,18 +1,26 @@
 import json
 import os
 import re
-import psycopg2
-from groq import Groq
 
 try:
-    import google.generativeai as genai
+    import psycopg2
+except ModuleNotFoundError:
+    psycopg2 = None
+
+try:
+    from groq import Groq
+except ModuleNotFoundError:
+    Groq = None
+
+try:
+    import google.genai as google_genai
 except ModuleNotFoundError:
     genai = None
 
 DB_CONFIG = {
-    "dbname": os.getenv("PGDATABASE", "your_db"),
-    "user": os.getenv("PGUSER", "your_user"),
-    "password": os.getenv("PGPASSWORD", "your_pw"),
+    "dbname": os.getenv("PGDATABASE", "hack"),
+    "user": os.getenv("PGUSER", "db"),
+    "password": os.getenv("PGPASSWORD", "0808"),
     "host": os.getenv("PGHOST", "localhost"),
     "port": int(os.getenv("PGPORT", "5432")),
 }
@@ -36,24 +44,43 @@ MAX_CANDIDATES = 5
 SIMILARITY_THRESHOLD = 0.20
 
 
-def _ensure_genai_configured():
-    if genai is None:
-        raise RuntimeError(
-            "google-generativeai is not installed. Install it with: pip install google-generativeai"
-        )
-    if getattr(_ensure_genai_configured, "configured", False):
-        return
-    api_key = os.getenv("Gemini", "").strip()
-    if not api_key:
-        raise RuntimeError(
-            "GEMINI_API_KEY is not set. Please export it before calling get_embedding()."
-        )
-    genai.configure(api_key=api_key)
-    _ensure_genai_configured.configured = True
+_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+# text-embedding-004 lives on v1beta; generate_content models live on v1
+_embed_client = None
+_generate_client = None
+
+
+def _get_embed_client():
+    """Client for embeddings — must use v1beta (text-embedding-004 not on v1)."""
+    global _embed_client
+    if google_genai is None:
+        raise RuntimeError("google-genai is not installed. Run: pip install google-genai")
+    if _embed_client is not None:
+        return _embed_client
+    _embed_client = google_genai.Client(
+        api_key=_GEMINI_API_KEY,
+        http_options={"api_version": "v1beta"},
+    )
+    return _embed_client
+
+
+def _get_generate_client():
+    """Client for generate_content — uses stable v1 endpoint."""
+    global _generate_client
+    if google_genai is None:
+        raise RuntimeError("google-genai is not installed. Run: pip install google-genai")
+    if _generate_client is not None:
+        return _generate_client
+    _generate_client = google_genai.Client(
+        api_key=_GEMINI_API_KEY,
+        http_options={"api_version": "v1"},
+    )
+    return _generate_client
 
 
 def _get_groq_client():
-    api_key = os.getenv("Groq", "").strip()
+    api_key = os.getenv("GROK_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError(
             "GROQ_API_KEY is not set. Please export it before calling llm_location_check()."
@@ -232,11 +259,27 @@ def _fetch_candidates(cur, vector_value, category, columns, include_category=Tru
     return cur.fetchall()
 
 
+# Embedding models to try in order — text-embedding-004 needs paid tier,
+# embedding-001 works on all free-tier keys.
+_EMBEDDING_MODELS = [
+    "models/gemini-embedding-001",
+    "models/text-embedding-004",
+]
+
 def get_embedding(text):
-    _ensure_genai_configured()
-    return genai.embed_content(model="models/text-embedding-004", content=text)[
-        "embedding"
-    ]
+    client = _get_embed_client()
+    last_exc = None
+    for model in _EMBEDDING_MODELS:
+        try:
+            result = client.models.embed_content(
+                model=model,
+                contents=text,
+            )
+            return result.embeddings[0].values
+        except Exception as exc:
+            print(f"Embedding model {model!r} failed: {exc}")
+            last_exc = exc
+    raise RuntimeError(f"All embedding models failed. Last error: {last_exc}")
 
 
 def llm_location_check(new_loc, existing_locs_with_ids):
@@ -285,6 +328,11 @@ def llm_location_check(new_loc, existing_locs_with_ids):
 def process_grievance_with_llm_filter(new_json):
     # 1. Prepare Data
     normalized = _normalize_payload(new_json)
+
+    if psycopg2 is None:
+        print("psycopg2 is not installed; skipping grievance DB operations.")
+        return normalized
+
     new_vector = get_embedding(normalized["detailed_description"])
 
     conn = psycopg2.connect(**DB_CONFIG)
@@ -413,6 +461,10 @@ def save_as_new_issue(cur, data, vector, columns):
         raise RuntimeError(
             "No compatible columns found in grievances table for insertion."
         )
+    
+    print(fields)
+    print(placeholders)
+    print(values)
 
     insert_sql = f"""
         INSERT INTO grievances ({', '.join(fields)})

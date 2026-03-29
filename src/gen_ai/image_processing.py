@@ -1,29 +1,38 @@
 import os
-from PIL import Image
 
 try:
-    import google.generativeai as genai
+    from PIL import Image
+except ModuleNotFoundError:
+    Image = None
+
+try:
+    import google.genai as genai
 except ModuleNotFoundError:
     genai = None
 
 
-def _ensure_genai_configured():
+_GEMINI_API_KEY = ""
+
+
+def _get_genai_client():
     if genai is None:
         raise RuntimeError(
-            "google-generativeai is not installed. Install it with: pip install google-generativeai"
+            "google-genai is not installed. Install it with: pip install google-genai"
         )
-    if getattr(_ensure_genai_configured, "configured", False):
-        return
-    api_key = os.getenv("Gemini", "").strip()
+    api_key = os.getenv("GEMINI_API_KEY", _GEMINI_API_KEY).strip()
     if not api_key:
         raise RuntimeError(
             "GEMINI_API_KEY is not set. Please export it before calling extract_text()."
         )
-    genai.configure(api_key=api_key)
-    _ensure_genai_configured.configured = True
+    # Force v1 stable endpoint (SDK defaults to v1beta)
+    return genai.Client(api_key=api_key, http_options={"api_version": "v1"})
 
 
 def extract_text(image_path):
+    if Image is None:
+        print("Pillow not installed; skipping image text extraction.")
+        return None
+
     try:
         img = Image.open(image_path)
         prompt = (
@@ -31,13 +40,16 @@ def extract_text(image_path):
             "Provide details like severity and surroundings."
         )
         try:
-            _ensure_genai_configured()
+            client = _get_genai_client()
         except RuntimeError as exc:
             print(f"Image description skipped: {exc}")
             return None
-        model = genai.GenerativeModel("gemini-2.5-flash-lite")
-        response = model.generate_content([prompt, img])
 
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=[prompt, img],
+        )
+        print(response)
         return response.text
     except FileNotFoundError:
         print(f"Error: The file at {image_path} was not found.")
