@@ -5,9 +5,7 @@ BASE_URL = "http://127.0.0.1:8000"
 
 st.set_page_config(page_title="AI-Smart City", layout="wide")
 
-# ─────────────────────────────────────────────
-# Custom CSS
-# ─────────────────────────────────────────────
+
 st.markdown("""
 <style>
     /* Auth card */
@@ -55,9 +53,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────
-# Session state defaults
-# ─────────────────────────────────────────────
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
 if "token" not in st.session_state:
@@ -68,17 +63,14 @@ if "auth_mode" not in st.session_state:
     st.session_state["auth_mode"] = "Login"   # or "Sign Up"
 
 
-# ─────────────────────────────────────────────
-# AUTH PAGE
-# ─────────────────────────────────────────────
 def auth_page():
     st.markdown("<h1 style='text-align:center;color:#d0e8ff;letter-spacing:2px;margin-top:20px;'>🏙️ AI SMART CITY</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align:center;color:#7aafd4;margin-bottom:0;'>Intelligent Urban Complaint Management</p>", unsafe_allow_html=True)
 
-    # Centre the card
+    
     _, mid, _ = st.columns([1, 1.6, 1])
     with mid:
-        # Toggle Login / Sign Up
+        
         col_l, col_r = st.columns(2)
         with col_l:
             if st.button("🔑  Login", use_container_width=True,
@@ -94,7 +86,8 @@ def auth_page():
         st.markdown("---")
 
         if st.session_state["auth_mode"] == "Login":
-            # ── LOGIN FORM ──
+
+            
             st.markdown("<div class='auth-title'>Welcome Back</div>", unsafe_allow_html=True)
             st.markdown("<div class='auth-subtitle'>Sign in to continue</div>", unsafe_allow_html=True)
 
@@ -125,7 +118,7 @@ def auth_page():
                         st.error("Cannot connect to the backend. Is it running?")
 
         else:
-            # ── SIGN UP FORM ──
+        
             st.markdown("<div class='auth-title'>Create Account</div>", unsafe_allow_html=True)
             st.markdown("<div class='auth-subtitle'>Join AI Smart City today</div>", unsafe_allow_html=True)
 
@@ -158,11 +151,10 @@ def auth_page():
                         st.error("Cannot connect to the backend. Is it running?")
 
 
-# ─────────────────────────────────────────────
-# MAIN APP (shown only when logged in)
-# ─────────────────────────────────────────────
+
+
 def main_app():
-    # ── Top bar ──
+    
     col_title, col_user = st.columns([5, 1])
     with col_title:
         st.title("🏙️ AI SMART CITY")
@@ -196,7 +188,6 @@ def main_app():
 
     st.divider()
 
-    # ─── 2. Description Section ───
     st.header("Enter User Description")
     description_input = st.text_area("Enter your description:", placeholder="What is in this image?")
     address_input = st.text_input("Enter the address", placeholder="Address of the complaint area")
@@ -255,9 +246,6 @@ def main_app():
             )
 
 
-# ─────────────────────────────────────────────
-# ROUTER
-# ─────────────────────────────────────────────
 if st.session_state["logged_in"]:
     main_app()
 else:
