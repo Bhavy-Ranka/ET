@@ -58,14 +58,14 @@ def create_access_token(data: dict):
 # --- Routes ---
 
 @router.post("/signup")
-async def signup(username: str, password: str, db: Session = Depends(get_db)):
+async def signup(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     # Check if user exists in SQL
-    existing_user = db.query(UserDB).filter(UserDB.username == username).first()
+    existing_user = db.query(UserDB).filter(UserDB.username == form_data.username).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already registered")
     
-    hashed_pwd = get_password_hash(password)
-    new_user = UserDB(username=username, hashed_password=hashed_pwd)
+    hashed_pwd = get_password_hash(form_data.password)
+    new_user = UserDB(username=form_data.username, hashed_password=hashed_pwd)
     
     db.add(new_user)
     db.commit()
