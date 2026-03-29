@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from backend.database import UserDB, get_db
+from database import UserDB, get_db
 
 SECRET_KEY = "HACKATHON_SUPER_SECRET_KEY"
 ALGORITHM = "HS256"
