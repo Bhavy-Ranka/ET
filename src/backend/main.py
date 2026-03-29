@@ -109,21 +109,39 @@ async def view_image(filename: str):
         raise HTTPException(status_code=404, detail=f"File {filename} not found on server.")
     return FileResponse(file_path)
 
-
 @app.get("/admin/complaints")
 async def get_all_complaints(current_user: str = Depends(get_current_user)):
     if current_user not in ["BHAVY", "SMARTYY"]:
         raise HTTPException(status_code=403, detail="Not authorized as admin")
-    db = SessionLocal()
-    complaints = db.query(ComplaintDB).all()
-    db.close()
-    return [
-        {
-            "username": c.username,
-            "text": c.text,
-            "address": c.address,
-            "filename": c.filename,
-            "severity": c.severity,
-        }
-        for c in complaints
-    ]
+    
+    try:
+        from pymongo import MongoClient
+        import os
+        client = MongoClient(os.getenv("MONGO_URI", "mongodb://localhost:27017"))
+        db = client[os.getenv("MONGO_DB", "hack")]
+        collection = db[os.getenv("MONGO_COLLECTION", "grievances")]
+        
+        complaints = list(collection.find({}, {"embedding": 0}))  # exclude embedding field
+        for c in complaints:
+            c["_id"] = str(c["_id"])  # convert ObjectId to string
+        
+        return complaints
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"MongoDB error: {e}")
+    
+@app.delete("/admin/complaints/{complaint_id}")
+async def delete_complaint(complaint_id: str, current_user: str = Depends(get_current_user)):
+    if current_user not in ["BHAVY", "SMARTYY"]:
+        raise HTTPException(status_code=403, detail="Not authorized as admin")
+    try:
+        from pymongo import MongoClient
+        from bson import ObjectId
+        client = MongoClient(os.getenv("MONGO_URI", "mongodb://localhost:27017"))
+        db = client[os.getenv("MONGO_DB", "hack")]
+        collection = db[os.getenv("MONGO_COLLECTION", "grievances")]
+        result = collection.delete_one({"_id": ObjectId(complaint_id)})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Complaint not found")
+        return {"status": "deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))    

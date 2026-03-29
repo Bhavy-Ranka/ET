@@ -1,4 +1,0 @@
-in rag 
-
-1. processing the image 2. extracting the text from the image using OCR
-3. analyzing the extracted text for relevant information

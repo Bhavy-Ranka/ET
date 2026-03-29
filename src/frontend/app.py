@@ -199,10 +199,11 @@ def main_app():
                 response = requests.post(f"{BASE_URL}/imageDescription", json=payload, headers=headers)
                 if response.status_code == 200:
                     data = response.json()
-                    st.write(data["pipeline"])
+                    if data.get("pipeline_warning"):
+                        st.warning(data["pipeline_warning"])
                     st.session_state["confirmed_description"] = data.get("description")
-                    # FIX: backend now returns address; fall back to the input if somehow missing
                     st.session_state["confirmed_address"] = data.get("address") or address_input
+                    st.session_state["pipeline"] = data.get("pipeline", {})  # ADD THIS
                     st.success("Description uploaded successfully.")
                 else:
                     st.error(f"Failed to upload description. Status: {response.status_code}")
@@ -213,33 +214,36 @@ def main_app():
 
     if "uploaded_image" in st.session_state and "confirmed_description" in st.session_state:
         st.header("Result")
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.image(st.session_state["uploaded_image"], width=400)
-            st.markdown(
-                f"""
-                <div style='
-                    background-color: #1a3a5c;
-                    border: 1px solid #2e6da4;
-                    border-radius: 8px;
-                    padding: 12px 16px;
-                    margin-top: 10px;
-                    text-align: center;
-                    font-size: 16px;
-                    color: #d0e8ff;
-                '>
-                    <b>Description:</b> {st.session_state["confirmed_description"]}<br>
-                    <b>Address:</b> {st.session_state.get("confirmed_address", "N/A")}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+        pipeline = st.session_state.get("pipeline", {})
+        severity = pipeline.get("severity", "N/A")
+        severity_color = {"High": "#ff4b4b", "Medium": "#ffa500", "Low": "#00c853"}.get(severity, "#7aafd4")
+
+        col_img, col_info = st.columns([1, 1])
+
+        with col_img:
+            st.image(st.session_state["uploaded_image"], use_container_width=True)
+
+        with col_info:
+            st.markdown(f"""
+            <div style='background:#0d1b2a;border:1px solid #2e6da4;border-radius:12px;padding:20px;height:100%;'>
+                <h4 style='color:#d0e8ff;margin-top:0;'>📋 {pipeline.get("issue_title", "Civic Issue")}</h4>
+                <hr style='border-color:#2e6da4;'/>
+                <p style='color:#7aafd4;margin:6px 0;'><b style='color:#d0e8ff;'>📝 Description:</b><br>{st.session_state["confirmed_description"]}</p>
+                <p style='color:#7aafd4;margin:6px 0;'><b style='color:#d0e8ff;'>📍 Address:</b> {st.session_state.get("confirmed_address", "N/A")}</p>
+                <p style='color:#7aafd4;margin:6px 0;'><b style='color:#d0e8ff;'>📂 Category:</b> {pipeline.get("category", "N/A")}</p>
+                <p style='margin:6px 0;'><b style='color:#d0e8ff;'>⚠️ Severity:</b> 
+                    <span style='background:{severity_color};color:#fff;padding:2px 10px;border-radius:12px;font-weight:bold;'>{severity}</span>
+                </p>
+                <p style='color:#7aafd4;margin:6px 0;'><b style='color:#d0e8ff;'>🤖 AI Summary:</b><br>{pipeline.get("detailed_description", "N/A")}</p>
+                <p style='color:#7aafd4;margin:6px 0;'><b style='color:#d0e8ff;'>🏷️ Tags:</b> {", ".join(pipeline.get("tags", [])) or "N/A"}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
 
 def admin_panel():
     col_title, col_user = st.columns([5, 1])
     with col_title:
-        st.title("🏙️ AI Smart City — Admin Panel")
+        st.title("🏙️ Admin Dashboard")
     with col_user:
         st.markdown(f"<div class='user-badge'>🛡️ {st.session_state['username']}</div>", unsafe_allow_html=True)
         if st.button("Logout", type="secondary"):
@@ -252,23 +256,66 @@ def admin_panel():
     try:
         resp = requests.get(f"{BASE_URL}/admin/complaints", headers=headers)
         if resp.status_code == 200:
-            complaints = resp.json()
-            if not complaints:
-                st.info("No complaints have been filed yet.")
-            else:
-                for c in complaints:
-                    with st.expander(f"📌 {c['username']} — {c['address']}"):
-                        st.write(f"**Description:** {c['text']}")
-                        st.image(
-                            f"{BASE_URL}/view/{c['filename']}",
-                            caption="Attached Evidence",
-                            width=300
-                        )
-                        st.write(f"**Severity:** {c['severity']}")
+            all_complaints = resp.json()
+            
+            if not all_complaints:
+                st.info("No active complaints.")
+                return
+
+            # --- SEPARATION LOGIC ---
+            high_sev = [c for c in all_complaints if c.get('severity') == "High"]
+            med_sev = [c for c in all_complaints if c.get('severity') == "Medium"]
+            low_sev = [c for c in all_complaints if c.get('severity', 'Low') not in ["High", "Medium"]]
+
+            # --- UI LAYOUT ---
+            # Define columns for the three categories
+            col1, col2, col3 = st.columns(3)
+
+            sections = [
+                (col1, "🔴 High Severity", high_sev, "#ff4b4b"),
+                (col2, "🟡 Medium Severity", med_sev, "#ffa500"),
+                (col3, "🟢 Low Severity", low_sev, "#00c853")
+            ]
+
+            for column, title, data, color in sections:
+                with column:
+                    st.markdown(f"<h3 style='text-align:center; color:{color};'>{title}</h3>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='border-bottom: 2px solid {color}; margin-bottom:15px;'></div>", unsafe_allow_html=True)
+                    
+                    if not data:
+                        st.write("✨ Clear")
+                    
+                    for c in data:
+                        with st.container():
+                            # Styling each card
+                            st.markdown(f"""
+                            <div style='border: 1px solid {color}; border-radius: 10px; padding: 10px; margin-bottom: 10px; background-color: rgba(0,0,0,0.2);'>
+                                <p style='margin:0; font-weight:bold;'>{c.get('issue_title', 'Untitled')}</p>
+                                <p style='font-size: 0.8em; color: #7aafd4;'>📍 {c.get('formatted_location', 'Unknown')}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Detail expander
+                            with st.expander("View Details"):
+                                if c.get('image_path'):
+                                    img_name = c['image_path'].split('/')[-1]
+                                    st.image(f"{BASE_URL}/view/{img_name}", use_container_width=True)
+                                st.write(f"**Reported by:** {c.get('user_name')}")
+                                st.write(f"**Description:** {c.get('detailed_description')}")
+                                
+                                # --- THE DONE BUTTON ---
+                                if st.button(f"✅ Mark Resolved", key=f"btn_{c['_id']}"):
+                                    del_resp = requests.delete(f"{BASE_URL}/admin/complaints/{c['_id']}", headers=headers)
+                                    if del_resp.status_code == 200:
+                                        st.success("Resolved!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to delete.")
+
         else:
-            st.error("Access denied or backend error.")
-    except requests.exceptions.ConnectionError:
-        st.error("Cannot connect to the backend. Is it running?")
+            st.error("Failed to fetch data from server.")
+    except Exception as e:
+        st.error(f"Error: {e}")
 
 
 ADMIN_USERS = ["BHAVY", "SMARTYY"]

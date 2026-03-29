@@ -45,7 +45,7 @@ MAX_CANDIDATES = 5
 SIMILARITY_THRESHOLD = 0.20
 
 
-_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
 # text-embedding-004 lives on v1beta; generate_content models live on v1
 _embed_client = None
@@ -404,7 +404,7 @@ def process_grievance_with_llm_filter(new_json):
                 if current_status == "resolved":
                     # If the previous one is already 'done', treat this as a brand new issue
                     save_as_new_issue(collection, normalized, new_vector, user_name, new_json)
-                    return normalized, "Grievance registered successfully (previous issue was resolved)."
+                    return normalized, "Grievance registered successfully ."
 
                 update = {"$inc": {"report_count": 1}}
                 if candidate.get("priority") is None:

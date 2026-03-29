@@ -108,6 +108,8 @@ def grievance_pipeline(image_path, raw_location, user_text):
     image_description = extract_text(image_path)
     if not image_description:
         image_description = "Image description unavailable."
+        
+    # print(image_description)
 
     prompt = f"""
     You are a Municipal Grievance Analyzer. Combine the following inputs into a structured JSON report.
@@ -168,21 +170,21 @@ def grievance_pipeline(image_path, raw_location, user_text):
         payload.get("formatted_location") or raw_location
     )
     tags = _normalize_tags(payload.get("tags"))
-    # print(
-    #     {
-    #         "issue_title": issue_title,
-    #         "detailed_description": detailed_description,
-    #         "category": category,
-    #         "severity": severity,
-    #         "formatted_location": formatted_location,
-    #         "tags": tags,
-    #         "priority": _severity_to_priority(severity),
-    #         "report_count": 1,
-    #         "status": "open",
-    #         "raw_location": _normalize_location(raw_location),
-    #         "image_path": image_path,
-    #     }
-    # )
+    print(
+        {
+            "issue_title": issue_title,
+            "detailed_description": detailed_description,
+            # "category": category,
+            # "severity": severity,
+            # "formatted_location": formatted_location,
+            # "tags": tags,
+            # "priority": _severity_to_priority(severity),
+            # "report_count": 1,
+            # "status": "open",
+            # "raw_location": _normalize_location(raw_location),
+            # "image_path": image_path,
+        }
+    )
 
     return {
         "issue_title": issue_title,
@@ -199,10 +201,10 @@ def grievance_pipeline(image_path, raw_location, user_text):
     }
 
 
-if __name__ == "__main__":
-    result = grievance_pipeline(
-        "Newport_Whitepit_Lane_pot_hole.jpg",
-        "Near IIT Indore Gate 2",
-        "Road pe bahut bada gadda hai",
-    )
-    print(result)
+# if __name__ == "__main__":
+#     result = grievance_pipeline(
+#         "72314253.jpg",
+#         "Near IIT Indore Gate 2",
+#         "pani bhar gaya",
+#     )
+#     print(result)

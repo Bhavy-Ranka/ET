@@ -19,12 +19,11 @@ def _get_genai_client():
         raise RuntimeError(
             "google-genai is not installed. Install it with: pip install google-genai"
         )
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    api_key = os.getenv("GEMINI_API_KEY", _GEMINI_API_KEY).strip()
     if not api_key:
         raise RuntimeError(
             "GEMINI_API_KEY is not set. Please export it before calling extract_text()."
         )
-    # Force v1 stable endpoint (SDK defaults to v1beta)
     return genai.Client(api_key=api_key, http_options={"api_version": "v1"})
 
 
@@ -46,7 +45,7 @@ def extract_text(image_path):
             return None
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model="gemini-2.5-flash",
             contents=[prompt, img],
         )
         print(response)
@@ -57,3 +56,6 @@ def extract_text(image_path):
     except Exception as e:
         print(f"An error occurred: {e}")
         return None
+
+
+# extract_text("face.jpeg")
