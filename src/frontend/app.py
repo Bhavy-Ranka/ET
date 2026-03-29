@@ -199,6 +199,7 @@ def main_app():
                 response = requests.post(f"{BASE_URL}/imageDescription", json=payload, headers=headers)
                 if response.status_code == 200:
                     data = response.json()
+                    st.write(data["pipeline"])
                     st.session_state["confirmed_description"] = data.get("description")
                     # FIX: backend now returns address; fall back to the input if somehow missing
                     st.session_state["confirmed_address"] = data.get("address") or address_input
